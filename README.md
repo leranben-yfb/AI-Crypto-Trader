@@ -1,0 +1,152 @@
+# ELMS Crypto Agent — AI Bitcoin Futures Trading System
+
+**Status:** Design specification / not yet implemented  
+**Established:** 2026-11-06  
+**Repository:** `leranben-yfb/AI-Crypto-Trader`
+
+> This document records the trading-system design discussed on 2026-11-06. The parameters are *proposed starting assumptions*, not demonstrated trading edges or authorization for live leveraged trading. Do not enable live execution until venue, account, API, controls, and simulation gates are verified.
+
+## Mission and relationship to ELMS Trading Agent
+
+Build a standalone, Python-based automated Bitcoin futures trading agent inspired by the existing ELMS IBKR equities bot. Reuse the analytical philosophy, operational discipline, logging, and risk-management patterns, **not** the same brokerage connection or risk state. Keep crypto equity, credentials, trade ledger, kill switch, and strategy lifecycle isolated from the IBKR system.
+
+The initial target is **BTC perpetual-style futures** with the ability to **go long, go short, stay flat, add, trim, and exit**. Primary objectives are risk-adjusted returns, controlled drawdowns, and verifiable performance net of fees, spreads, slippage, funding/financing, and other costs. Never assume a profitable strategy exists before testing.
+
+## Venue and eligibility (OPEN / BLOCKER)
+
+User has a **regular personal Coinbase account with Advanced Trade** and is located in **New York, USA**. Coinbase offers U.S.-regulated perpetual-style futures products; **whether this particular account can access them and whether a retail Advanced Trade API key can submit/modify orders for them has NOT been verified**. Exchange-level FIX APIs and international Deribit/Coinbase derivatives APIs do **not** establish U.S. retail API eligibility. Before implementation:
+- Verify NY residency/product eligibility, account approval, applicable contract(s), and actual trade permissions.
+- Identify the precise supported *retail* REST/FIX/WebSocket API endpoints for BTC perpetual-style futures and verify authentication, order entry, cancellation, position reads, margin and liquidation fields.
+- Confirm API support for protective, reduce-only, partial, and stop orders; tick/lot/contract increments, minimum notional, trading hours, maintenance, fee schedule, and data licensing.
+- Confirm futures vs international perpetual differences, contract specifications and financing/funding mechanics; **do not assume standard offshore perpetual mechanics apply to U.S. contracts**.
+- No live orders until a test confirms an approved, eligible account and exact compatible API.
+
+No API credentials or secrets should be committed to this public repository. Use environment variables/secret storage, permission minimization, and a default-off live-trading switch.
+
+## Strategy architecture
+
+Separate signal analysis from deterministic portfolio/risk controls and exchange execution.
+
+```text
+Market data + macro/liquidity context
+            |
+   Regime classification (weekly/daily/4H)
+            |
+Strategy candidates (trend / mean reversion / reversal)
+            |
+Signal validation + expected edge after costs
+            |
+Deterministic risk gate (size, margin, liquidation, stops)
+            |
+Execution adapter -> exchange (after account/API verification)
+            |
+Reconciliation, position manager, audit logs, reporting
+```
+
+**Regime and direction:** Decide independently whether BTC is bullish, bearish, or range-bound. Hedgeye Quad analysis, Treasury yields, dollar and broader liquidity conditions can inform context but **cannot override BTC price/market structure**. Dominant trends receive priority: in bear regimes focus on shorts, but allow smaller, higher-confirmation countertrend longs; inverse in bull regimes. In ranges consider longs at support and shorts at resistance. Staying flat is encouraged when signals conflict.
+
+**Three candidate strategies:**
+1. Trend following: trade with dominant direction, ideally entering on pullbacks to support or rallies to resistance.
+2. Mean reversion: selective countertrend bounces/fades; smaller risk budgets, tighter invalidation and time limits.
+3. Breakout / regime-reversal detection: respond when structure indicates an actual change in direction, not a single noisy candle.
+
+**Feature candidates:** Trend structure, returns, volatility, volatility-of-volatility, volume and volume divergence, momentum, fractal/market structure signals, support/resistance and risk ranges, open interest, futures basis/financing (if applicable), order book liquidity and transaction costs. Any AI confidence/probability must be calibrated out-of-sample; do not equate model confidence with a real edge. The AI proposes trades; rules-based controls determine whether they are permissible.
+
+## Timeframe priorities
+
+| Timeframe | Role |
+| --- | --- |
+| Weekly | Structural macro backdrop |
+| Daily (1D) | Primary bullish/bearish directional bias |
+| **4-hour (4H)** | **Main trade thesis, trend and setup** |
+| **1-hour (1H)** | **Signal confirmation and position management** |
+| 15-minute (15m) | Entries, partial profit-taking, tactical exits |
+| 5-minute (5m) | Execution refinement only; never overrule larger trend on noise |
+
+**Primary horizon:** 4H/1H swing trades lasting hours to days. **Secondary horizon:** smaller-risk 1H/15m tactical trades lasting minutes to hours, accounted for separately. These horizons are initial hypotheses for backtesting, not optimized settings.
+
+**Proposed evaluation cadence:**
+- Continuous streaming price/order/position monitoring; event-driven protective risk responses.
+- Evaluate potential entries/exits every ~1–5 minutes, with completed 15m/1H/4H candle confirmation as appropriate.
+- Recompute larger-regime views on closed candles and after significant verified macro/data events.
+- Avoid tick-by-tick trade churn and look-ahead bias.
+
+## Trade entry workflow
+
+1. Identify the current market regime and volatility/liquidity conditions.
+2. Generate long, short or no-trade candidates from eligible strategies.
+3. Check multi-timeframe trend agreement or explicitly classify countertrend trades.
+4. Validate a measurable trigger (e.g., rejection of resistance in a downtrend, break/retest, confirmed momentum), an invalidation price, expected payoff vs downside, and likely slippage/fees.
+5. Estimate opportunity after costs; reject weak, conflicting, illiquid or uncalibrated signals.
+6. Apply risk limits **before** submitting the order.
+7. Record the input snapshot, thesis, model version, rationale, risk calculation, and final decision (including rejected trades).
+
+Example only: BTC in a daily/4H downtrend rallies toward resistance; 1H momentum fades and 15m confirms rejection -> short candidate. A bear-market relief long is possible **only** under stronger reversal evidence and smaller risk limits.
+
+## Leveraged futures risk engine — hard constraints
+
+- Proposed initial **risk budget 0.25%–0.50% of account equity per trade**; validate before using.
+- Start with minimal effective leverage (possibly unleveraged-equivalent exposure); any suggested 1–2x limit is a **design ceiling for testing, not a directive**. Margin requirements, contract granularity and account constraints govern practical feasibility.
+- Calculate notional from `max_risk_dollars / stop_distance_fraction`, capped by leverage, margin, contract size, portfolio risk, and liquidity. Quantize contracts to venue minimums; reject trades that cannot be sized safely.
+- Protective stops placed/verified at the venue when supported. Stops are **not guaranteed fills**; model gaps, slippage, fees and emergency failure.
+- Require a substantial buffer between stop/invalidation and estimated liquidation level; recalculate after every fill, trim, add and margin change.
+- No martingale or averaging down simply to rescue a losing position; any add requires a fresh favorable setup and full portfolio-risk recheck.
+- Hard account-level exposure, loss, drawdown, concentration and consecutive-loss/cooldown limits; independent emergency kill switch.
+- Fail closed on missing/stale market data, API uncertainty, state mismatch, order rejection, inability to verify protective orders, or degraded exchange connectivity.
+- Use reduce-only orders for trims/exits **where available**; otherwise ensure sizing prevents accidental reversal.
+- No implied permission to trade live. Manual review gates and simulation first.
+
+## Active position management and “feed the ducks”
+
+**No mandatory all-or-nothing fixed take-profit.** Manage an open trade based on remaining expected edge, trend health, volatility, risk-range location, and transaction costs:
+- **HOLD:** underlying trade structure and reward/risk remain favorable.
+- **TRIM (“feed the ducks”):** realize some gain as price reaches a favorable target/risk-range edge, becomes extended, or momentum/volume wanes; maintain a core position while larger trend remains valid.
+- **ADD:** only into a position when a new favorable price/risk signal justifies it and total exposure stays within deterministic limits.
+- **EXIT:** trade thesis invalidated, protective stop triggered, regime materially changed, risk limits breached, funding/holding costs overwhelm expected edge, or opportunity cost/time stop rules fire.
+- **EMERGENCY EXIT:** separate risk engine responds immediately to critical conditions regardless of model preference.
+
+Illustrative *nonbinding* long example: enter at BTC $100k, trim 20% of original exposure near $103k, another 25% near $106k, and hold the remaining 55% if the higher-timeframe trend stays strong. Short positions use mirrored logic. Actual trim fractions and trigger thresholds are **to be discovered by testing**, not hardcoded from this illustration.
+
+Dynamic volatility-adjusted trailing stops may protect a portion of open profits but cannot guarantee gains; compare against static exits through testing. After each reduction or increase, reconcile filled contracts and protective orders so remaining risk is correct. Respect contract minimums and commission efficiency; no tiny trims that fees overwhelm.
+
+Track maximum favorable excursion (MFE), maximum adverse excursion (MAE), realized and unrealized P&L, surrendered gains, net returns, and whether partial profit-taking or trailing stops help relative to alternate policies.
+
+## Operational architecture
+
+Modules proposed:
+- `connectors/` — Coinbase/authorized venue account, execution and streaming data adapter
+- `data/` — market, candle, macro and contract-spec ingestion with quality checks
+- `regime/` — weekly/daily/4H market classification
+- `signals/` — trend, reversion, breakout/reversal proposals
+- `portfolio/` — open position truth, fills, equity, funding/fees, reconciliation
+- `risk/` — deterministic sizing, exposure, margin, liquidation, kill switch
+- `execution/` — idempotent order lifecycle, reduce-only checks, retry/recovery
+- `analytics/` — backtesting, walk-forward testing, reporting, P&L attribution
+- `ops/` — structured logs, alerts, health checks, status/dashboard
+
+Never trust a submitted order to have filled. Reconcile exchange orders, positions and balances; recover safely from disconnects and restarts. Distinguish transient network errors from rejected/unknown-order states to prevent duplicate leveraged orders. Define timezone-independent timestamps (UTC), venue trading-calendar exceptions, rate limits, and incident runbooks.
+
+## Development gates / definition of done
+
+1. **Access/contract validation:** U.S./NY retail account eligibility, exact API permissions, instrument specs, and safe order types documented.
+2. **Read-only prototype:** secure connectivity, live/historical BTC candles, futures contract and margin state, auditable data checks.
+3. **Research:** backtest multiple regimes with realistic spreads, fees, financing/funding where applicable, slippage, leverage and liquidations; avoid look-ahead and overfitting; evaluate risk-adjusted return vs BTC holding and flat cash.
+4. **Walk-forward/out-of-sample:** calibrated predictive usefulness, sensitivity analyses, market shocks, data outages, and realistic execution constraints.
+5. **Paper/shadow mode:** shadow trades, order simulator, position and stop management, “feed the ducks,” outage/disconnect and restart tests.
+6. **Small, manually approved live pilot (only if eligible):** kill switch tested, strict loss caps, alerts, audits, periodic review.
+7. **Scale only on evidence:** require sustained net performance and operational reliability; never increase leverage to compensate for weak signals.
+
+## Open design questions (not settled)
+
+- Confirm Coinbase retail U.S. perpetual-style derivatives **API trade support**, specific BTC contract, NY eligibility and permission status.
+- Clarify 24/7 access, daily session/maintenance behavior, margin, fees and actual financing conventions.
+- Choose an exact risk-range algorithm and explicit model features/thresholds.
+- Decide whether short-term countertrend signals should be permitted simultaneously with swing positions (netting vs hedge-mode limitations).
+- Establish portfolio caps, max drawdown/daily loss and cooldown parameters from stress testing.
+- Validate partial trim granularity and protective-order management.
+- Determine historical data availability and reliable backtesting sources.
+- Determine whether the initial implementation should stay fully rules-based for entries or incorporate a calibrated ML score.
+
+## Guiding principle
+
+**AI discovers and ranks opportunities; deterministic controls manage survival and execution.** The system should prefer no trade to a weak trade, harvest profits selectively while keeping healthy core exposure, and remain isolated from the IBKR equities agent.
