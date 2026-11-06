@@ -12,6 +12,22 @@ Build a standalone, Python-based automated Bitcoin futures trading agent inspire
 
 The initial target is **BTC perpetual-style futures** with the ability to **go long, go short, stay flat, add, trim, and exit**. Primary objectives are risk-adjusted returns, controlled drawdowns, and verifiable performance net of fees, spreads, slippage, funding/financing, and other costs. Never assume a profitable strategy exists before testing.
 
+## Independence from the equities trading system — permanent architecture principle
+
+The [ELMS AI Trading System](https://github.com/leranben-yfb/ai-trading-system) is a **reference implementation and accumulated engineering knowledge base**, not a parent runtime, dependency, mandated template, or source of trading authority for this crypto project. The ELMS Crypto Agent must be designed and evaluated as a standalone Bitcoin-focused system, with its own development roadmap and evidence-based strategy choices.
+
+**Reuse selectively:** Consult the equities repository for macroeconomic ingestion and rate-of-change methodology, growth/inflation Quad-like analysis, Treasury-curve/yield-driver interpretation, cross-asset context, market metrics (including volume, volatility, vol-of-vol and fractal analysis), AI candidate review, structured logging, audit trails, data freshness, decision-generation validation, tests, service supervision, recovery, and fail-closed operational controls. Reuse concepts or independently adapted code only when applicable, correct, tested, and beneficial to crypto.
+
+**Adapt to the BTC market:** Crypto trades around the clock and has different liquidity, volatility, market structure, contract specifications, funding/financing, margin, liquidation exposure, venue behavior, and operational failure modes. Design crypto-native data, signals, trading horizons, position management, and leveraged-futures safety around those facts. Treat macro inputs as context to be validated against BTC market action, not automatic directional commands.
+
+**Do not blindly transplant:** IBKR connectivity, equities account state, market hours, whole-share sizing, the $250 order floor, PDT logic, Hedgeye equities email/portfolio/RTA authority, current-day equities Risk Ranges, position increments, and equities-specific risk thresholds are **not crypto rules**. An approach effective in equities is a hypothesis in crypto until tested independently.
+
+**Strict isolation:** Maintain a separate GitHub repository, broker/exchange API integration, credentials and secrets, configuration, state and database namespace, order/position/fill ledger, portfolio accounting, risk policy, kill switch, process supervision, logs, and deployments. The crypto bot must be able to operate or fail safely without the equities bot running; neither system can submit orders, share risk state, or mutate positions for the other.
+
+**Evidence and change discipline:** Evaluate shared techniques through crypto-specific backtests, point-in-time macro data, walk-forward and paper/shadow testing, realistic fees/slippage/funding/liquidation constraints, and operational failure tests before live use. Prefer an independent crypto implementation when that is cleaner or safer. Avoid unnecessary parity with equities features; new crypto capabilities need not be added to equities.
+
+**Working rule for future development:** Before borrowing a component from `ai-trading-system`, identify (1) the reusable principle, (2) BTC-specific assumptions requiring adaptation, (3) isolation boundaries, and (4) validation proving usefulness. Reference the equities repository's current code and tests, not stale chat summaries or historical release notes.
+
 ## Venue and eligibility (OPEN / BLOCKER)
 
 User has a **regular personal Coinbase account with Advanced Trade** and is located in **New York, USA**. Coinbase offers U.S.-regulated perpetual-style futures products; **whether this particular account can access them and whether a retail Advanced Trade API key can submit/modify orders for them has NOT been verified**. Exchange-level FIX APIs and international Deribit/Coinbase derivatives APIs do **not** establish U.S. retail API eligibility. Before implementation:
