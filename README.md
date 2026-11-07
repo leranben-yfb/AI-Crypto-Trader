@@ -142,6 +142,36 @@ Modules proposed:
 
 Never trust a submitted order to have filled. Reconcile exchange orders, positions and balances; recover safely from disconnects and restarts. Distinguish transient network errors from rejected/unknown-order states to prevent duplicate leveraged orders. Define timezone-independent timestamps (UTC), venue trading-calendar exceptions, rate limits, and incident runbooks.
 
+## Minimal desktop GUI — V1 design guidelines
+
+The GUI is a **small operator control panel for the private, self-directed ELMS Crypto trading bot**, not a charting platform, analytical terminal, or substitute for the autonomous engine. It must be simple enough to understand at a glance. The trading engine runs independently of the GUI and continues to respect its own validated risk/execution rules. The commercial, alert-only product is a separate potential offering; do not silently grant it live execution capabilities because this GUI supports them.
+
+### Required V1 controls
+
+- **Start / Stop:** clear running/stopped state. Define Stop as **stop new entries/increases**, not abandoning open leveraged positions. Existing protective orders and risk management must remain intact or follow a verified safe shutdown policy. Show the actual engine state, not just whether the window is open.
+- **Maximum trade leverage:** user-selectable only within the eligible venue's verified contract limits and the engine's hard safety ceiling; leverage is not a substitute for risk-per-trade sizing.
+- **Minimum and maximum position size:** clearly labeled units and calculation basis (proposed default: position notional as a percent of account equity), with validation that minimum <= maximum and hard margin/liquidation/exposure constraints always prevail.
+- **Position risk-increase / risk-decrease increment:** configurable sizing step for authorized adds and trims. Distinguish *position notional increment* from *dollars at risk to a stop*. Do not import the equities bot's fixed 50 bp increments or $250 order floor as default crypto rules.
+- **Trade activity log:** timestamp (with timezone), instrument, side, action (ENTRY, EXIT, INCREASE, REDUCE), quantity, fill price, notional, fees/financing where applicable, realized profit/loss and cumulative realized P&L. Derive trade results from reconciled exchange fills; preserve partial-fill and adjustment history. Show failed/rejected actions distinctly from fills.
+- **PnL view with selectable periods:** 1D, 1W, 1M, 3M, 1Y, ALL; simple account equity / cumulative P&L line chart and clear net dollar and percentage returns. Make it evident whether P&L is realized, unrealized, or combined; net of exchange fees and relevant financing; avoid hypothetical performance being mistaken for actual history.
+- **Connection/health indicator:** concise exchange connectivity, live market-data freshness, bot health, and alert for critical failures.
+- **Emergency Close:** clearly separated, confirmation-protected control intended to cancel applicable open orders and attempt to flatten exposure safely. Account for partial fills, disconnections, and exchange failure; never promise guaranteed liquidation or imply an unconfirmed close succeeded.
+
+### Interaction and safety requirements
+
+- **Separate Stop New Trades from Emergency Close.** Provide visible state for STOPPED, RUNNING, DEGRADED, and EMERGENCY / ENTRY HALTED as applicable. License expiration or GUI closure must never silently strand risky positions.
+- Settings changes must be validated, persisted safely, auditable, and applied at well-defined boundaries. Invalid settings (e.g., min > max, excessive leverage, granularity below contract minimum) must be rejected with plain-language feedback; existing protective safeguards cannot be weakened by UI values.
+- Prefer read-only presentation of trading activity and P&L; do not add discretionary manual order tickets, advanced charts, macro dashboards, or dozens of strategy controls to V1.
+- Keep the GUI responsive and decoupled from market-data polling, AI model evaluation, trade decisions, exchange connections, and protective execution. UI crashes must not kill an otherwise healthy risk engine.
+- **Implementation preference:** Python **PySide6 (Qt)** for a lightweight Windows desktop control panel, subject to packaging, dependency, distribution/licensing, and maintainability validation. Avoid adding a React/Tauri/FastAPI stack solely to render these basic controls.
+- GUI mockups and sample numbers are illustrative; never display fictional P&L as real trading results.
+
+### Future product boundary
+
+The private automated-trading application and any commercial standardized **signals-only** offering are different operating products. A signals-only subscriber GUI must not expose exchange-account connection, order execution, or live-trading buttons. Decide licensing/regulatory architecture separately; do not present an educational disclaimer as a replacement for reviewing the product's actual functionality.
+
+**V1 guiding principle:** **Start/stop, configure risk, see every trade, review P&L, and know whether the system is healthy. Nothing more unless operational safety requires it.**
+
 ## Development gates / definition of done
 
 1. **Access/contract validation:** U.S./NY retail account eligibility, exact API permissions, instrument specs, and safe order types documented.
